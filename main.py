@@ -7,6 +7,7 @@ import sys
 import aiohttp
 import requests
 from playwright.async_api import async_playwright
+from controllers.main_controller import MainController
 
 
 class Config:
@@ -236,4 +237,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    controller = MainController()
+    sys.exit(controller.run()) 
