@@ -108,53 +108,57 @@ class VideoDownloader(QObject):
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=self.config.headers) as response:
                     if response.status == 200:
-                        content = await response.read()
-                        with open(save_path, "wb") as f:
-                            f.write(content)
-                        self.log_message.emit(f"{'音频' if is_audio else '视频'}下载成功：{save_path}")
-                        
-                        if is_audio:
-                            # 如果是音频文件，转换为wav格式
-                            wav_path = os.path.join(self.config.audio_path, f"{video_id}.wav")
-                            try:
-                                cmd = [
-                                    self.config.ffmpeg_path,
-                                    '-i', save_path,
-                                    '-acodec', 'pcm_s16le',
-                                    '-ar', '16000',
-                                    '-ac', '1',
-                                    '-y',
-                                    wav_path
-                                ]
-                                
-                                process = subprocess.run(cmd, check=True, capture_output=True, text=True)
-                                
-                                if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
-                                    self.log_message.emit(f"音频转换成功：{wav_path}")
-                                    await asyncio.sleep(1)
-                                    await self.speech_recognition(wav_path, video_id)
-                                else:
-                                    self.log_message.emit("音频转换失败")
-                                    
-                            except subprocess.CalledProcessError as e:
-                                self.log_message.emit(f"音频转换失败：{e.stderr}")
-                                self.log_message.emit(f"FFmpeg 命令：{' '.join(cmd)}")
-                                
-                        else:
-                            self.log_message.emit(f"下载失败：{response.status}")
+                        try:
+                            content = await response.read()
+                            with open(save_path, "wb") as f:
+                                f.write(content)
+                            self.log_message.emit(f"{'音频' if is_audio else '视频'}下载成功：{save_path}")
                             
+                            if is_audio:
+                                # 如果是音频文件，转换为wav格式
+                                wav_path = os.path.join(self.config.audio_path, f"{video_id}.wav")
+                                try:
+                                    cmd = [
+                                        self.config.ffmpeg_path,
+                                        '-i', save_path,
+                                        '-acodec', 'pcm_s16le',
+                                        '-ar', '16000',
+                                        '-ac', '1',
+                                        '-y',
+                                        wav_path
+                                    ]
+                                    
+                                    process = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                                    
+                                    if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+                                        self.log_message.emit(f"音频转换成功：{wav_path}")
+                                        await asyncio.sleep(1)
+                                        await self.speech_recognition(wav_path, video_id)
+                                    else:
+                                        self.log_message.emit("音频转换失败")
+                                        
+                                except subprocess.CalledProcessError as e:
+                                    self.log_message.emit(f"音频转换失败：{e.stderr}")
+                                    self.log_message.emit(f"FFmpeg 命令：{' '.join(cmd)}")
+                                    
+                        except (asyncio.CancelledError, TimeoutError):
+                            # 静默处理超时错误
+                            pass
+                        except Exception as e:
+                            self.log_message.emit(f"下载处理时出错: {str(e)}")
+                    else:
+                        self.log_message.emit(f"下载失败：{response.status}")
+                    
+        except (asyncio.CancelledError, TimeoutError):
+            # 静默处理超时错误
+            pass
         except Exception as e:
-            self.log_message.emit(f"下载处理时出错: {str(e)}")
-            import traceback
-            self.log_message.emit(traceback.format_exc())
+            if not isinstance(e, (asyncio.CancelledError, TimeoutError)):
+                self.log_message.emit(f"下载处理时出错: {str(e)}")
 
     async def download_videos(self, urls):
         """下载视频"""
         try:
-            # 首先加载 Whisper 模型
-            if self.model is None:
-                await self.load_whisper_model()
-                
             # 创建必要的目录
             for directory in [self.config.download_path, 
                             self.config.audio_path, 
@@ -198,6 +202,13 @@ class VideoDownloader(QObject):
                             # 访问视频页面
                             await self.get_video_url(page, url)
                             
+                            # 等待下载完成
+                            await asyncio.sleep(2)
+                            
+                            # 检查是否需要加载模型
+                            if self.model is None:
+                                await self.load_whisper_model()
+                            
                             # 等待文本文件生成
                             for _ in range(10):  # 最多等待10秒
                                 if os.path.exists(text_file):
@@ -205,28 +216,21 @@ class VideoDownloader(QObject):
                                     break
                                 await asyncio.sleep(1)
                             
-                            # 如果文本文件已生成，继续处理下一个视频
-                            if os.path.exists(text_file):
-                                continue
-                            
                         except Exception as e:
                             self.log_message.emit(f"处理视频时出错: {str(e)}")
                             continue
                         
-                        # 更新进度
-                        progress = int((i / total) * 100)
-                        self.progress_updated.emit(progress)
-                    
-                    self.log_message.emit(f"\n处理完成！成功下载 {success_count}/{total} 个视频")
+                    self.log_message.emit(f"\n处理完成，成功处理 {success_count}/{total} 个视频")
                     self.download_finished.emit()
                     
                 except Exception as e:
-                    self.log_message.emit(f"连接Chrome失败: {str(e)}")
-                    self.log_message.emit("请确保Chrome已启动且开启了远程调试端口")
+                    self.log_message.emit(f"浏览器操作失败: {str(e)}")
                 
         except Exception as e:
-            self.log_message.emit(f"错误: {str(e)}")
-            
+            self.log_message.emit(f"下载过程出错: {str(e)}")
+            import traceback
+            self.log_message.emit(traceback.format_exc())
+
     async def get_video_id(self, share_url: str) -> str:
         """从分享链接中提取视频ID"""
         try:
