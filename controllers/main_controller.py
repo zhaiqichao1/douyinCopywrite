@@ -51,10 +51,11 @@ class MainController:
         # 连接信号
         self.window.start_chrome.connect(self.start_chrome)
         self.window.start_processing.connect(lambda urls: self.start_processing(urls))
+        self.window.process_imported_video.connect(self.process_imported_video)
+        self.window.process_imported_audio.connect(self.process_imported_audio)  # 连接新的信号
         self.downloader.log_message.connect(self.window.log)
         self.downloader.progress_updated.connect(self.window.update_progress)
         self.downloader.download_finished.connect(self.window.processing_finished)
-        self.window.process_imported_video.connect(self.process_imported_video)
         
     def start_chrome(self):
         """启动Chrome"""
@@ -95,6 +96,23 @@ class MainController:
         self.import_thread = QThread()
         self.import_thread.run = lambda: asyncio.run(process())
         self.import_thread.start()
+        
+    def process_imported_audio(self, audio_paths):
+        """处理导入的音频文件"""
+        async def process():
+            try:
+                for audio_path in audio_paths:
+                    await self.downloader.process_imported_audio(audio_path)
+                self.downloader.download_finished.emit()
+            except Exception as e:
+                self.downloader.log_message.emit(f"导入音频失败: {str(e)}")
+                import traceback
+                self.downloader.log_message.emit(traceback.format_exc())
+        
+        # 创建新线程来运行异步任务
+        self.import_audio_thread = QThread()
+        self.import_audio_thread.run = lambda: asyncio.run(process())
+        self.import_audio_thread.start()
         
     def run(self):
         """运行应用"""

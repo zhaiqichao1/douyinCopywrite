@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtCore import pyqtSignal
 import os
 import shutil
+import asyncio
 
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
@@ -55,6 +56,7 @@ class MainWindow(QMainWindow):
     start_processing = pyqtSignal(list)  # 开始处理信号
     start_chrome = pyqtSignal()  # 启动Chrome信号
     process_imported_video = pyqtSignal(str)  # 处理导入的视频信号
+    process_imported_audio = pyqtSignal(list)  # 添加新的信号用于处理音频
     
     def __init__(self):
         super().__init__()
@@ -127,6 +129,11 @@ class MainWindow(QMainWindow):
         self.import_video_button = QPushButton('导入视频')
         self.import_video_button.clicked.connect(self.import_videos)
         bottom_buttons.addWidget(self.import_video_button)
+        
+        # 添加导入音频按钮
+        self.import_audio_button = QPushButton("导入音频", self)
+        self.import_audio_button.clicked.connect(self.import_audio)
+        bottom_buttons.addWidget(self.import_audio_button)
         
         layout.addLayout(bottom_buttons)
         
@@ -218,4 +225,16 @@ class MainWindow(QMainWindow):
                 self.log(f"导入视频: {video_name}")
                 
                 # 发送处理信号
-                self.process_imported_video.emit(target_path) 
+                self.process_imported_video.emit(target_path)
+
+    def import_audio(self):
+        """导入音频文件"""
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        file_dialog.setNameFilter("音频文件 (*.mp3 *.wav *.m4a *.aac *.flac *.ogg)")
+        
+        if file_dialog.exec():
+            audio_paths = file_dialog.selectedFiles()
+            if audio_paths:
+                self.log_output.append("开始处理导入的音频文件...")
+                self.process_imported_audio.emit(audio_paths)  # 发送信号而不是直接调用 
