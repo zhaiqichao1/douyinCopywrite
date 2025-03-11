@@ -1,0 +1,10 @@
+{
+    "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "chrome_debug_port": 9222,
+    "chrome_user_data_dir": "./chrome-data",
+    "douyin_url": "https://www.douyin.com/",
+    "download_path": "video",
+    "audio_path": "audio",
+    "text_path": "text",
+    "ffmpeg_path": "lib/ffmpeg.exe"
+}
