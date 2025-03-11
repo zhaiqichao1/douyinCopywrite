@@ -248,4 +248,39 @@ class VideoDownloader(QObject):
             self.log_message.emit(f"语音识别失败: {str(e)}")
             return None
             
+    async def process_imported_video(self, video_path):
+        """处理导入的视频文件"""
+        try:
+            video_id = os.path.splitext(os.path.basename(video_path))[0]
+            
+            # 检查是否已经处理过
+            text_file = os.path.join(self.config.text_path, f"{video_id}.txt")
+            if os.path.exists(text_file):
+                self.log_message.emit("该视频已经处理过，跳过")
+                return
+            
+            # 提取音频
+            audio_path = os.path.join(self.config.audio_path, f"{video_id}.wav")
+            try:
+                subprocess.run([
+                    self.config.ffmpeg_path,
+                    '-i', video_path,
+                    '-vn',
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    '-ac', '1',
+                    '-y',
+                    audio_path
+                ], check=True, capture_output=True)
+                
+                self.log_message.emit(f"音频提取成功：{audio_path}")
+                await asyncio.sleep(1)
+                await self.speech_recognition(audio_path, video_id)
+                
+            except subprocess.CalledProcessError as e:
+                self.log_message.emit(f"音频提取失败：{e.stderr.decode()}")
+            
+        except Exception as e:
+            self.log_message.emit(f"处理导入视频时出错: {str(e)}")
+            
     # ... 其他方法保持不变 ... 

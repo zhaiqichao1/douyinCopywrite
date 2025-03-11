@@ -1,6 +1,7 @@
 import sys
 import asyncio
 import subprocess
+import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QThread, pyqtSlot
 from ui.main_window import MainWindow
@@ -42,8 +43,9 @@ class DownloadThread(QThread):
 class MainController:
     def __init__(self):
         self.app = QApplication(sys.argv)
+        self.config = Config()  # 先创建配置
         self.window = MainWindow()
-        self.config = Config()
+        self.window.config = self.config  # 传递配置给窗口
         self.downloader = VideoDownloader(self.config)
         
         # 连接信号
@@ -52,13 +54,22 @@ class MainController:
         self.downloader.log_message.connect(self.window.log)
         self.downloader.progress_updated.connect(self.window.update_progress)
         self.downloader.download_finished.connect(self.window.processing_finished)
+        self.window.process_imported_video.connect(self.process_imported_video)
         
     def start_chrome(self):
         """启动Chrome"""
         if not self.config.chrome_path:
-            self.window.chrome_failed("未找到Chrome浏览器，请确保已安装Chrome")
+            self.window.chrome_failed("请先在设置中配置Chrome浏览器路径")
             return
             
+        if not os.path.exists(self.config.chrome_path):
+            self.window.chrome_failed("Chrome路径无效，请检查设置")
+            return
+            
+        # 修改start_chrome.bat的内容
+        with open('start_chrome.bat', 'w', encoding='utf-8') as f:
+            f.write(f'@echo off\nstart "" "{self.config.chrome_path}" --remote-debugging-port={self.config.chrome_debug_port} --user-data-dir={self.config.chrome_user_data_dir} {self.config.douyin_url}')
+        
         self.chrome_thread = ChromeThread(self.config)
         self.chrome_thread.finished.connect(self.chrome_finished)
         self.chrome_thread.start()
@@ -75,6 +86,15 @@ class MainController:
         """开始处理视频"""
         self.download_thread = DownloadThread(self.downloader, urls)
         self.download_thread.start()
+        
+    def process_imported_video(self, video_path):
+        """处理导入的视频"""
+        async def process():
+            await self.downloader.process_imported_video(video_path)
+            
+        self.import_thread = QThread()
+        self.import_thread.run = lambda: asyncio.run(process())
+        self.import_thread.start()
         
     def run(self):
         """运行应用"""
