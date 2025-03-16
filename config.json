@@ -1,10 +1,44 @@
 {
-    "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "chrome_debug_port": 9222,
-    "chrome_user_data_dir": "./chrome-data",
-    "douyin_url": "https://www.douyin.com/",
     "download_path": "video",
     "audio_path": "audio",
     "text_path": "text",
-    "ffmpeg_path": "lib/ffmpeg.exe"
+    "ffmpeg_path": "E:/zqc/pythonProject/douyinCopywrite/ffmpeg.exe",
+    "download_audio": true,
+    "download_cover": false,
+    "extract_text": true,
+    "douyin_cookie": "ttwid=1%7C8D_5gRTirlgRMJId6CwVj6ZacJyai0tSh0zRLYBsArc%7C1741680364%7C8937382110040416947d2cc3998d7517552199d3f769b81741449c3eedc2265a; UIFID_TEMP=fd93a02f3f52f94d15e514b5060909b7718dbdccf5e652d020e98a2368c5c67f16bf8b2dcc7320511fdcdb3c7a56aa8c98df7ef9491e7bde208d3fbc256b65885c8b09c42278bc296d8e421b9bf91148fe5e7e3043ed80819d0a4af5a685d4453ce27820d2905cb9eea6e71efad6e82a; hevc_supported=true; upgrade_tag=1; xgplayer_user_id=807219727166; s_v_web_id=verify_m847iu5w_y4kcACa2_9b1j_4X0F_8YRq_Zr07t3O8RqEM; passport_csrf_token=4526a3d6a03e4ad43e54b7c0a1b61f29; passport_csrf_token_default=4526a3d6a03e4ad43e54b7c0a1b61f29; fpk1=U2FsdGVkX1/FMDdnK/TyHG0UHHZOr5L9k2C9HDmu5oDEsTJqt+l7M97AVc6vRSMCv7XPdKCO11rD0fCTX1OojQ==; fpk2=6dbb10952a38c11d19e2648023d5055b; __security_mc_1_s_sdk_crypt_sdk=f1549b31-48ce-ae36; bd_ticket_guard_client_web_domain=2; FORCE_LOGIN=%7B%22videoConsumedRemainSeconds%22%3A180%2C%22isForcePopClose%22%3A1%7D; SearchMultiColumnLandingAbVer=1; SEARCH_RESULT_LIST_TYPE=%22multi%22; SearchColumnSwitchLog=%5B%7B%22date%22%3A%222025-03-12%22%2C%22latestColumnType%22%3A%22multi%22%7D%5D; is_dash_user=1; UIFID=fd93a02f3f52f94d15e514b5060909b7718dbdccf5e652d020e98a2368c5c67f16bf8b2dcc7320511fdcdb3c7a56aa8cdc8a8549223f7c0d78284e0e16eeb728f15dafb70845fa3bcb2337eed624276514259a06c40045ad546713ab4ba5ef5279da9a0512b8a602e6e7e21e3597062ca6505dbc8622c44d2a05cdc46f185b295f994a020a531b47919900f1aa6762bf94b55f0a58d8a24f870c73655be9f035a8133fa9239d90d93e0524af828abac4f5dd3b4b3a545bc6f1c4993a47b689b0; volume_info=%7B%22isUserMute%22%3Afalse%2C%22isMute%22%3Atrue%2C%22volume%22%3A0.5%7D; stream_player_status_params=%22%7B%5C%22is_auto_play%5C%22%3A0%2C%5C%22is_full_screen%5C%22%3A0%2C%5C%22is_full_webscreen%5C%22%3A0%2C%5C%22is_mute%5C%22%3A1%2C%5C%22is_speed%5C%22%3A1%2C%5C%22is_visible%5C%22%3A0%7D%22; download_guide=%223%2F20250312%2F0%22; strategyABtestKey=%221742101215.386%22; passport_assist_user=CkDUpeWzS9raXFYYB9XIhhYVwFzP6JEcsrY9IQcH13mHzTsRq0UIK-1jO9KWCiGqJLIvCDCjSipyqyuDotL9U5NGGkoKPAAAAAAAAAAAAABOw02Oph8XfPe8Bg_7f4UVryiVRtBejnuaVr-PPj98A20g9JyEuBWNcv1DFdOlfu9_-RD8k-wNGImv1lQgASIBA6YWZFI%3D; n_mh=Hf6mHPgfyGBgV48UFE-ogogtqXoXCkVcLHunUrYci4s; sid_guard=fbfec3280a215e02e4acf6476c121b61%7C1742101471%7C5184000%7CThu%2C+15-May-2025+05%3A04%3A31+GMT; uid_tt=47e762493ffd8a2dc4986e25aa6ca8f8; uid_tt_ss=47e762493ffd8a2dc4986e25aa6ca8f8; sid_tt=fbfec3280a215e02e4acf6476c121b61; sessionid=fbfec3280a215e02e4acf6476c121b61; sessionid_ss=fbfec3280a215e02e4acf6476c121b61; is_staff_user=false; sid_ucp_v1=1.0.0-KDkwMmRiMTQ2YmJkNTYxMzQyNGJiYmNjNTg3ZWRiOTQzMzg1YzgxMWUKIQitvdCK9PWnARDft9m-BhjvMSAMMO2r0P8FOAdA9AdIBBoCbGYiIGZiZmVjMzI4MGEyMTVlMDJlNGFjZjY0NzZjMTIxYjYx; ssid_ucp_v1=1.0.0-KDkwMmRiMTQ2YmJkNTYxMzQyNGJiYmNjNTg3ZWRiOTQzMzg1YzgxMWUKIQitvdCK9PWnARDft9m-BhjvMSAMMO2r0P8FOAdA9AdIBBoCbGYiIGZiZmVjMzI4MGEyMTVlMDJlNGFjZjY0NzZjMTIxYjYx; store-region=cn-sd; store-region-src=uid; login_time=1742101471447; SelfTabRedDotControl=%5B%5D; _bd_ticket_crypt_cookie=fc37316628d690e2d052bb2271ccb7a6; __security_mc_1_s_sdk_sign_data_key_web_protect=fe07a57a-4fed-a5f3; __security_mc_1_s_sdk_cert_key=f59c897f-4b9d-9306; __security_server_data_status=1; biz_trace_id=4f054250; WallpaperGuide=%7B%22showTime%22%3A1742101238986%2C%22closeTime%22%3A0%2C%22showCount%22%3A1%2C%22cursor1%22%3A16%2C%22cursor2%22%3A4%7D; __ac_nonce=067d6a0c700f496cd74a6; __ac_signature=_02B4Z6wo00f01-2RwOwAAIDCMsozob7O4FvtscRAAJy829; dy_swidth=400; dy_sheight=832; stream_recommend_feed_params=%22%7B%5C%22cookie_enabled%5C%22%3Atrue%2C%5C%22screen_width%5C%22%3A400%2C%5C%22screen_height%5C%22%3A832%2C%5C%22browser_online%5C%22%3Atrue%2C%5C%22cpu_core_num%5C%22%3A12%2C%5C%22device_memory%5C%22%3A8%2C%5C%22downlink%5C%22%3A10%2C%5C%22effective_type%5C%22%3A%5C%224g%5C%22%2C%5C%22round_trip_time%5C%22%3A100%7D%22; FOLLOW_LIVE_POINT_INFO=%22MS4wLjABAAAAylQzVVOLpxi4_JwHyPgdReyKt-CdOScEKuOzPpKlMnM%2F1742140800000%2F0%2F0%2F1742120001425%22; FOLLOW_NUMBER_YELLOW_POINT_INFO=%22MS4wLjABAAAAylQzVVOLpxi4_JwHyPgdReyKt-CdOScEKuOzPpKlMnM%2F1742140800000%2F0%2F0%2F1742120601425%22; bd_ticket_guard_client_data=eyJiZC10aWNrZXQtZ3VhcmQtdmVyc2lvbiI6MiwiYmQtdGlja2V0LWd1YXJkLWl0ZXJhdGlvbi12ZXJzaW9uIjoxLCJiZC10aWNrZXQtZ3VhcmQtcmVlLXB1YmxpYy1rZXkiOiJCQ1pMeldZN1BYQ1lLOFo3Q1ZoZUlFMW9sRmU0OFJsUTMzVUFvVkVHbkx0N01yRXRveG16K3U4S3h4WDVmcXJ2WUQvUnE2alF6U0RSQ2RYUWhXNWVTQTQ9IiwiYmQtdGlja2V0LWd1YXJkLXdlYi12ZXJzaW9uIjoyfQ%3D%3D; home_can_add_dy_2_desktop=%221%22; odin_tt=4c72e0b64c00bacd36bd1f2f80c74ec7fd42993514d06c2056e876e0c33a22feeaee482e0b8f10e9a8a314caeada6c3a03fe08b2f03cc9faa0e7592e9ab395ad; publish_badge_show_info=%220%2C0%2C0%2C1742119406224%22; passport_fe_beating_status=true; IsDouyinActive=false",
+    "edge_path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "edge_debug_port": 9222,
+    "edge_user_data_dir": "./edge_data",
+    "use_selenium": false,
+    "use_api": true,
+    "api_timeout": 30,
+    "max_retries": 3,
+    "speech_recognition_engine": "百度语音识别",
+    "speech_recognition_config": {
+        "whisper": {
+            "model": "base",
+            "language": "zh"
+        },
+        "google": {
+            "language": "zh-CN"
+        },
+        "baidu": {
+            "app_id": "",
+            "api_key": "",
+            "secret_key": ""
+        },
+        "ali": {
+            "access_key_id": "",
+            "access_key_secret": ""
+        },
+        "xunfei": {
+            "app_id": "",
+            "api_key": "",
+            "api_secret": ""
+        },
+        "paddlespeech": {
+            "model": "conformer_wenetspeech"
+        }
+    }
 }
