@@ -14,10 +14,10 @@
     "use_api": true,
     "api_timeout": 30,
     "max_retries": 3,
-    "speech_recognition_engine": "百度语音识别",
+    "speech_recognition_engine": "Whisper (OpenAI)",
     "speech_recognition_config": {
         "whisper": {
-            "model": "base",
+            "model": "small",
             "language": "zh"
         },
         "google": {

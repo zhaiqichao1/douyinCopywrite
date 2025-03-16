@@ -19,73 +19,381 @@ from playwright.async_api import async_playwright
 
 
 class SpeechRecognizer:
+    # 引擎名称映射 - 只保留 Whisper 和 PaddleSpeech
+    ENGINE_MAP = {
+        "whisper": "whisper",
+        "Whisper (OpenAI)": "whisper",
+        "paddlespeech": "paddlespeech",
+        "PaddleSpeech": "paddlespeech"
+    }
+    
     def __init__(self, config):
+        """初始化语音识别器"""
         self.config = config
-        self.engine = config.speech_recognition_engine
-        self.engine_config = config.speech_recognition_config.get(self.engine, {})
+        
+        # 获取选择的引擎，如果不在映射中，默认使用 whisper
+        engine_name = config.speech_recognition_engine
+        self.engine = self.ENGINE_MAP.get(engine_name, "whisper")
+        print(f"选择的语音识别引擎: {self.engine}")
+        
+        # whisper模型
+        self.whisper_model = None
+        self.engine_config = config.speech_recognition_config
+        
+        # 获取各引擎配置 - 只保留需要的配置
+        self.whisper_config = self.engine_config.get('whisper', {})
+        self.paddle_config = self.engine_config.get('paddlespeech', {})
+        
+        # 获取 ffmpeg 路径
+        self.ffmpeg_path = config.ffmpeg_path
         
     def recognize(self, audio_path):
-        """根据选择的引擎进行语音识别"""
+        """识别音频文件，返回识别结果"""
         try:
+            print(f"使用引擎: {self.engine} 识别音频")
+            
+            # 严格检查当前选择的引擎并调用对应方法
             if self.engine == "whisper":
-                return self._whisper_recognize(audio_path)
-            elif self.engine == "google":
-                return self._google_recognize(audio_path)
-            elif self.engine == "baidu":
-                return self._baidu_recognize(audio_path)
+                try:
+                    import whisper
+                    return self._whisper_recognize(audio_path)
+                except ImportError:
+                    print("Warning: Whisper库未安装，请使用pip install openai-whisper安装")
+                    return None
             elif self.engine == "paddlespeech":
                 return self._paddlespeech_recognize(audio_path)
             else:
-                raise ValueError(f"不支持的语音识别引擎: {self.engine}")
+                print(f"不支持的语音识别引擎: {self.engine}，将使用whisper引擎")
+                try:
+                    import whisper
+                    return self._whisper_recognize(audio_path)
+                except ImportError:
+                    print("Warning: Whisper库未安装，请使用pip install openai-whisper安装")
+                    return None
+                
         except Exception as e:
-            self.log_message.emit(f"语音识别失败: {str(e)}")
+            print(f"语音识别出错: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             return None
-        
+            
     def _whisper_recognize(self, audio_path):
-        """使用Whisper进行语音识别"""
-        model_name = self.engine_config.get('model', 'base')
-        model = whisper.load_model(model_name)
-        result = model.transcribe(audio_path, language='zh')
-        return result['text']
-    
-    def _google_recognize(self, audio_path):
-        """使用Google语音识别"""
-        r = sr.Recognizer()
-        with sr.AudioFile(audio_path) as source:
-            audio = r.record(source)
+        """使用Whisper识别音频"""
         try:
-            text = r.recognize_google(audio, language=self.engine_config.get('language', 'zh-CN'))
+            import whisper
+            
+            model_name = self.whisper_config.get('model', 'base')
+            language = self.whisper_config.get('language', 'zh')
+            
+            print(f"使用Whisper模型 {model_name} 识别音频...")
+            
+            # 检查是否已有加载好的模型
+            if self.whisper_model:
+                print("使用已加载的Whisper模型")
+                model = self.whisper_model
+            else:
+                # 加载模型
+                print(f"加载Whisper {model_name} 模型...")
+                model = whisper.load_model(model_name)
+                self.whisper_model = model
+                
+            # 输出设备信息
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"使用设备: {device}")
+            
+            # 识别音频
+            result = model.transcribe(audio_path, language=language)
+            text = result.get('text', '')
+            
+            print(f"Whisper识别完成，文本长度: {len(text)} 字符")
             return text
-        except sr.UnknownValueError:
-            self.log_message.emit("Google语音识别无法理解音频")
+        except Exception as e:
+            print(f"Whisper识别出错: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             return None
-        
-    def _baidu_recognize(self, audio_path):
-        """使用百度语音识别"""
-        # 需要安装百度SDK并配置API密钥
-        from aip import AipSpeech
-        
-        client = AipSpeech(
-            self.engine_config.get('app_id', ''),
-            self.engine_config.get('api_key', ''),
-            self.engine_config.get('secret_key', '')
-        )
-        
-        with open(audio_path, 'rb') as f:
-            audio_data = f.read()
-        
-        result = client.asr(audio_data, 'wav', 16000, {
-            'dev_pid': 1537,  # 普通话
-        })
-        
-        return result.get('result', [None])[0] if result.get('err_no') == 0 else None
-    
+            
     def _paddlespeech_recognize(self, audio_path):
-        """使用PaddleSpeech进行语音识别"""
-        model = self.engine_config.get('model', 'conformer_wenetspeech')
-        asr = ASRExecutor()
-        result = asr(audio_path, model=model)
-        return result
+        """使用PaddleSpeech识别音频"""
+        try:
+            # 确认PaddleSpeech已安装
+            from paddlespeech.cli.asr.infer import ASRExecutor
+            
+            model = self.paddle_config.get('model', 'conformer_wenetspeech')
+            
+            # 初始化ASR执行器
+            asr = ASRExecutor()
+            
+            # 识别音频
+            print(f"使用PaddleSpeech模型 {model} 识别音频...")
+            result = asr(audio_file=audio_path, model=model)
+            return result
+        except ImportError:
+            print("PaddleSpeech未安装，请按照官方文档安装: https://github.com/PaddlePaddle/PaddleSpeech")
+            return None
+        except Exception as e:
+            print(f"PaddleSpeech识别出错: {str(e)}")
+            return None
+            
+    def _xunfei_recognize(self, audio_path):
+        """使用讯飞语音识别API识别音频"""
+        try:
+            import websocket
+            import hmac
+            import base64
+            import hashlib
+            import json
+            import time
+            from urllib.parse import urlencode
+            import ssl
+            from wsgiref.handlers import format_date_time
+            from datetime import datetime
+            from time import mktime
+            
+            # 获取API配置
+            app_id = self.xunfei_config.get('app_id', '')
+            api_key = self.xunfei_config.get('api_key', '')
+            api_secret = self.xunfei_config.get('api_secret', '')
+            
+            if not app_id or not api_key or not api_secret:
+                print("讯飞语音识别API配置不完整")
+                return None
+            
+            # 讯飞API参数和URL
+            url = 'wss://iat-api.xfyun.cn/v2/iat'
+            host = "iat-api.xfyun.cn"
+            
+            # 读取音频文件
+            with open(audio_path, 'rb') as f:
+                file_content = f.read()
+            
+            # 讯飞需要进行Base64编码
+            base64_audio = base64.b64encode(file_content).decode('utf-8')
+            
+            # 生成认证需要的数据
+            class XunfeiRecognizer:
+                def __init__(self):
+                    self.result = ""
+                
+                def create_url(self):
+                    now = datetime.now()
+                    date = format_date_time(mktime(now.timetuple()))
+                    
+                    # 拼接字符串
+                    signature_origin = f"host: {host}\ndate: {date}\nGET /v2/iat HTTP/1.1"
+                    
+                    # 进行hmac-sha256签名
+                    signature_sha = hmac.new(api_secret.encode('utf-8'), signature_origin.encode('utf-8'),
+                                          digestmod=hashlib.sha256).digest()
+                    
+                    # 加密签名
+                    signature_sha_base64 = base64.b64encode(signature_sha).decode('utf-8')
+                    
+                    # 构建authorization
+                    authorization_origin = f'api_key="{api_key}", algorithm="hmac-sha256", headers="host date request-line", signature="{signature_sha_base64}"'
+                    
+                    # 再次进行base64编码
+                    authorization = base64.b64encode(authorization_origin.encode('utf-8')).decode('utf-8')
+                    
+                    # 拼接鉴权参数
+                    v = {
+                        "authorization": authorization,
+                        "date": date,
+                        "host": host
+                    }
+                    # 拼接URL
+                    return url + '?' + urlencode(v)
+                
+                def on_message(self, ws, message):
+                    # 处理返回的消息
+                    data = json.loads(message)
+                    code = data["code"]
+                    if code != 0:
+                        print(f"讯飞语音识别出错，错误码: {code}, 错误信息: {data}")
+                        ws.close()
+                        return
+                        
+                    if data["data"]["status"] == 2:  # 识别结束
+                        self.result += "".join([x["text"] for x in data["data"]["result"]["ws"]])
+                        ws.close()
+                
+                def on_error(self, ws, error):
+                    print(f"讯飞语音识别出错: {error}")
+                    ws.close()
+                
+                def on_close(self, ws, close_status_code, close_msg):
+                    pass
+                
+                def on_open(self, ws):
+                    """发送音频数据"""
+                    # 构建请求参数
+                    data = {
+                        "common": {
+                            "app_id": app_id
+                        },
+                        "business": {
+                            "language": "zh_cn",
+                            "domain": "iat",
+                            "accent": "mandarin",
+                            "dwa": "wpgs",
+                            "vad_eos": 10000  # 静默检测阈值
+                        },
+                        "data": {
+                            "status": 0,
+                            "format": "audio/L16;rate=16000",
+                            "encoding": "raw",
+                            "audio": base64_audio
+                        }
+                    }
+                    ws.send(json.dumps(data))
+                    # 发送结束标志
+                    data["data"]["status"] = 2
+                    data["data"]["audio"] = ""
+                    ws.send(json.dumps(data))
+            
+            # 进行识别
+            print("使用讯飞语音识别...")
+            recognizer = XunfeiRecognizer()
+            websocket.enableTrace(False)
+            ws_url = recognizer.create_url()
+            ws = websocket.WebSocketApp(ws_url,
+                                      on_message=recognizer.on_message,
+                                      on_error=recognizer.on_error,
+                                      on_close=recognizer.on_close)
+            ws.on_open = recognizer.on_open
+            ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+            
+            return recognizer.result
+            
+        except ImportError:
+            print("讯飞语音识别需要安装websocket-client库，请使用pip install websocket-client安装")
+            return None
+        except Exception as e:
+            print(f"讯飞语音识别出错: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return None
+    
+    def _ali_recognize(self, audio_path):
+        """使用阿里云语音识别API识别音频"""
+        try:
+            import json
+            import os
+            from aliyunsdkcore.client import AcsClient
+            from aliyunsdkcore.request import CommonRequest
+            import base64
+            
+            # 获取API配置
+            access_key_id = self.ali_config.get('access_key_id', '')
+            access_key_secret = self.ali_config.get('access_key_secret', '')
+            
+            if not access_key_id or not access_key_secret:
+                print("阿里云语音识别API配置不完整")
+                return None
+                
+            # 创建ACS客户端
+            client = AcsClient(access_key_id, access_key_secret, 'cn-shanghai')
+            
+            # 准备请求
+            request = CommonRequest()
+            request.set_domain('nls-meta.cn-shanghai.aliyuncs.com')
+            request.set_version('2019-02-28')
+            request.set_action_name('CreateToken')
+            
+            # 获取Token
+            response = client.do_action_with_exception(request)
+            token_json = json.loads(response.decode('utf-8'))
+            token = token_json.get('Token', {}).get('Id')
+            
+            if not token:
+                print("获取阿里云语音识别Token失败")
+                return None
+                
+            # 读取音频文件
+            with open(audio_path, 'rb') as f:
+                audio_content = f.read()
+                
+            # 进行Base64编码
+            audio_base64 = base64.b64encode(audio_content).decode('utf-8')
+            
+            # 构建识别请求
+            rec_request = CommonRequest()
+            rec_request.set_domain('nls-filetrans.cn-shanghai.aliyuncs.com')
+            rec_request.set_version('2018-08-17')
+            rec_request.set_action_name('SubmitTask')
+            rec_request.set_method('POST')
+            
+            # 设置任务参数
+            task_params = {
+                'appkey': access_key_id,
+                'token': token,
+                'file_link': '',  # 不使用文件链接
+                'first_channel_only': True,
+                'version': '4.0',
+                'enable_inverse_text_normalization': True,
+                'enable_punctuation_prediction': True,
+                'enable_words': False,
+                'enable_sample_rate_adaptive': True,
+                'speech_noise_threshold': 0.5,
+                'format': os.path.splitext(audio_path)[1][1:],  # 文件格式
+                'sample_rate': 16000,
+                'audio': audio_base64
+            }
+            
+            rec_request.add_body_params('Task', json.dumps(task_params))
+            rec_request.add_body_params('Type', 'asr')
+            
+            # 发送请求
+            print("使用阿里云语音识别...")
+            response = client.do_action_with_exception(rec_request)
+            result = json.loads(response.decode('utf-8'))
+            
+            if result.get('StatusCode') == 'REQUEST_EMPTY_BODY':
+                print("阿里云语音识别API返回错误: 请求体为空")
+                return None
+                
+            task_id = result.get('TaskId')
+            if not task_id:
+                print(f"阿里云语音识别API返回错误: {result}")
+                return None
+                
+            # 查询识别结果
+            get_result_request = CommonRequest()
+            get_result_request.set_domain('nls-filetrans.cn-shanghai.aliyuncs.com')
+            get_result_request.set_version('2018-08-17')
+            get_result_request.set_action_name('GetTaskResult')
+            get_result_request.set_method('GET')
+            get_result_request.add_query_param('TaskId', task_id)
+            
+            # 等待并获取识别结果
+            for _ in range(30):  # 最多等待30次
+                time.sleep(3)  # 每3秒查询一次结果
+                result_response = client.do_action_with_exception(get_result_request)
+                get_result = json.loads(result_response.decode('utf-8'))
+                
+                status = get_result.get('StatusText')
+                if status == 'RUNNING':
+                    print("阿里云语音识别中...")
+                    continue
+                elif status == 'SUCCESS':
+                    # 提取结果
+                    result = get_result.get('Result')
+                    sentences = json.loads(result).get('Sentences', [])
+                    text = ' '.join([s.get('Text', '') for s in sentences])
+                    return text
+                else:
+                    print(f"阿里云语音识别任务失败: {get_result}")
+                    return None
+                    
+            print("阿里云语音识别超时")
+            return None
+        except ImportError:
+            print("阿里云语音识别需要安装aliyun-python-sdk-core，请使用pip install aliyun-python-sdk-core安装")
+            return None
+        except Exception as e:
+            print(f"阿里云语音识别出错: {str(e)}")
+            return None
 
 class VideoDownloader(QObject):
     """抖音视频下载器，参考TikTokDownloader项目"""
@@ -98,13 +406,31 @@ class VideoDownloader(QObject):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.download_path = config.download_path
+        self.audio_path = config.audio_path
+        self.text_path = config.text_path
+        self.ffmpeg_path = config.ffmpeg_path
+        self.download_audio = config.download_audio
+        self.download_cover = config.download_cover
+        self.extract_text = config.extract_text
+        
+        # 初始化语音识别器
+        self.speech_recognizer = None
+        
+        # Whisper模型
+        self.whisper_model = None
+        self.model_load_progress = 0
+        
+        self.log_message.emit("初始化下载器...")
+        
+        # 确保下载目录存在
+        os.makedirs(self.download_path, exist_ok=True)
+        os.makedirs(self.audio_path, exist_ok=True)
+        os.makedirs(self.text_path, exist_ok=True)
+        
         self.model = None  # 初始化为 None
         self.last_share_text = ""  # 保存最后一次的分享文本
         
-        # 创建保存目录
-        for path in [config.download_path, config.audio_path, config.text_path]:
-            os.makedirs(path, exist_ok=True)
-            
         # 设置请求头
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
@@ -443,23 +769,35 @@ class VideoDownloader(QObject):
             return False
 
     async def _process_extra_content(self, video_info: Dict, video_path: str, aweme_id: str) -> None:
-        """处理额外内容，如提取音频和下载封面"""
+        """处理视频的额外内容，如音频提取和文案识别"""
         try:
             # 提取音频
-            if self.config.download_audio:
-                await self._extract_audio(video_path, aweme_id)
-            
-            # 下载封面图
+            if self.config.download_audio or self.config.extract_text:
+                self.log_message.emit(f"开始从视频中提取音频...")
+                audio_path = await self._extract_audio(video_path, aweme_id)
+                
+                if audio_path and self.config.extract_text:
+                    self.log_message.emit("开始执行语音识别...")
+                    # 使用 speech_recognition 方法，它会根据用户选择的引擎进行处理
+                    await self.speech_recognition(audio_path, aweme_id)
+                    
+            # 提取封面
             if self.config.download_cover:
                 cover_url = self._extract_cover_url(video_info)
                 if cover_url:
-                    cover_path = os.path.join(self.config.download_path, f"{aweme_id}_cover.jpg")
-                    if await self._download_media(cover_url, cover_path):
-                        self.log_message.emit(f"封面图下载成功: {cover_path}")
-        
+                    cover_path = os.path.join(self.download_path, f"{aweme_id}_封面.jpg")
+                    self.log_message.emit(f"开始下载视频封面...")
+                    
+                    # 下载封面
+                    success = await self._download_media(cover_url, cover_path)
+                    if success:
+                        self.log_message.emit(f"封面已保存: {cover_path}")
+                    else:
+                        self.log_message.emit("封面下载失败")
         except Exception as e:
             self.log_message.emit(f"处理额外内容时出错: {str(e)}")
-            # 这不应该影响主要的下载流程，所以我们只记录错误但不抛出
+            import traceback
+            self.log_message.emit(traceback.format_exc())
 
     def _validate_video_file(self, video_path: str) -> bool:
         """验证视频文件是否有效"""
@@ -1437,150 +1775,140 @@ class VideoDownloader(QObject):
             return False
 
     async def download_videos(self, share_urls: List[str]):
-        """批量下载视频 (参考 Evil0ctal/Douyin_TikTok_Download_API 项目)"""
+        """批量下载视频"""
         try:
-            # 初始化统计数据
+            if not share_urls:
+                self.log_message.emit("没有提供任何链接")
+                self.download_finished.emit()
+                return
+                
+            # 记录开始时间
             start_time = time.time()
+            
+            # 初始化计数
             total_count = len(share_urls)
             success_count = 0
             skip_count = 0
             fail_count = 0
             
-            self.log_message.emit(f"开始批量下载 {total_count} 个视频...")
+            self.log_message.emit(f"开始处理 {total_count} 个链接...")
             
-            for index, share_url in enumerate(share_urls):
+            for i, share_url in enumerate(share_urls):
+                # 更新进度
+                progress = int((i / total_count) * 100)
+                self.progress_updated.emit(progress)
+                
                 try:
-                    # 生成随机间隔，避免请求过快
-                    if index > 0:
-                        wait_time = random.uniform(1.0, 3.0)
-                        self.log_message.emit(f"等待 {wait_time:.1f} 秒后处理下一个视频...")
-                        await asyncio.sleep(wait_time)
+                    self.log_message.emit(f"\n正在处理第 {i+1}/{total_count} 个链接: {share_url}")
                     
-                    # 提示当前进度
-                    self.log_message.emit(f"处理第 {index+1}/{total_count} 个视频")
-                    self.log_message.emit(f"{'='*40}")
-                    
-                    # 解析分享链接
+                    # 解析链接
                     video_info = await self.parse_share_url(share_url)
                     if not video_info:
-                        self.log_message.emit(f"无法解析视频信息，跳过: {share_url}")
+                        self.log_message.emit("无法解析链接，跳过")
                         fail_count += 1
                         continue
-                    
-                    # 获取视频ID和标题
-                    aweme_id = video_info.get("aweme_id")
+                        
+                    # 提取视频ID
+                    aweme_id = video_info.get("aweme_id", "")
+                    if not aweme_id:
+                        self.log_message.emit("无法获取视频ID，跳过")
+                        fail_count += 1
+                        continue
+                        
+                    # 提取视频标题和作者
                     title = video_info.get("desc", f"抖音视频 {aweme_id}")
                     author = video_info.get("author", {}).get("nickname", "未知作者")
                     
+                    # 生成安全的文件名
+                    safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
+                    file_name = f"{aweme_id}.mp4"
+                    
+                    # 下载路径
+                    file_path = os.path.join(self.download_path, file_name)
+                    
                     # 检查是否需要跳过下载
-                    video_path = os.path.join(self.config.download_path, f"{aweme_id}.mp4")
-                    if await self._should_skip_download(aweme_id, video_path):
-                        self.log_message.emit(f"视频已存在，跳过下载: {title}")
+                    if await self._should_skip_download(aweme_id, file_path):
+                        self.log_message.emit(f"视频已下载，跳过: {title} - {author}")
                         skip_count += 1
+                        continue
                         
-                        # 即使视频已存在，也尝试提取音频和文字
-                        if os.path.exists(video_path):
-                            self.log_message.emit("视频已存在，尝试提取音频和文字...")
-                            # 确保模型已加载
-                            if self.model is None:
-                                self.log_message.emit("正在加载Whisper模型...")
-                                try:
-                                    await self.load_whisper_model()
-                                except Exception as e:
-                                    self.log_message.emit(f"加载模型失败: {str(e)}")
-                            
-                            # 提取音频
-                            audio_path = await self._extract_audio(video_path, aweme_id)
-                            if audio_path:
-                                self.log_message.emit("音频提取成功，开始进行语音识别...")
-                                try:
-                                    success = await self.speech_recognition(audio_path, aweme_id)
-                                    if success:
-                                        self.log_message.emit("语音识别成功完成！")
-                                    else:
-                                        self.log_message.emit("语音识别失败，请检查日志")
-                                except Exception as e:
-                                    self.log_message.emit(f"语音识别过程中出错: {str(e)}")
-                        
+                    # 下载视频
+                    self.log_message.emit(f"开始下载: {title} - {author}")
+                    
+                    # 检查并获取下载URL
+                    if "download_url" in video_info:
+                        download_url = video_info["download_url"]
+                    elif "video" in video_info and "play_addr" in video_info["video"]:
+                        url_list = video_info["video"]["play_addr"]["url_list"]
+                        if url_list:
+                            # 选择最佳URL（无水印）
+                            download_url = url_list[0].replace("playwm", "play")
+                        else:
+                            self.log_message.emit("无法获取下载链接，跳过")
+                            fail_count += 1
+                            continue
+                    else:
+                        self.log_message.emit("无法获取下载链接，跳过")
+                        fail_count += 1
                         continue
                     
-                    self.log_message.emit(f"视频标题: {title}")
-                    self.log_message.emit(f"作者: {author}")
-                    self.log_message.emit(f"视频ID: {aweme_id}")
-                    
-                    # 下载视频
-                    success = await self.download_video(video_info)
-                    if success:
-                        self.log_message.emit(f"视频 {aweme_id} 下载成功!")
+                    # 尝试下载
+                    if await self._download_media(download_url, file_path):
+                        self.log_message.emit(f"视频下载成功: {file_path}")
+                        
+                        # 添加到下载记录
+                        await self._add_download_record(aweme_id)
+                        
+                        # 处理额外内容（如音频和封面）
+                        # 这里调用_process_extra_content，确保使用用户选择的语音识别引擎
+                        await self._process_extra_content(video_info, file_path, aweme_id)
+                        
                         success_count += 1
-                        
-                        # 下载成功后，强制检查并加载模型
-                        if self.model is None:
-                            self.log_message.emit("下载成功，正在加载Whisper模型用于语音识别...")
-                            try:
-                                await self.load_whisper_model()
-                                self.log_message.emit("Whisper模型加载成功，准备进行语音识别")
-                            except Exception as e:
-                                self.log_message.emit(f"加载Whisper模型失败: {str(e)}")
-                                import traceback
-                                self.log_message.emit(traceback.format_exc())
-                        
-                        # 提取音频并尝试进行语音识别
-                        self.log_message.emit("开始提取音频...")
-                        audio_path = await self._extract_audio(video_path, aweme_id)
-                        
-                        # 如果音频提取成功，执行语音识别
-                        if audio_path and os.path.exists(audio_path):
-                            self.log_message.emit(f"音频提取成功: {audio_path}")
-                            # 再次确认模型已加载
-                            if self.model is not None:
-                                self.log_message.emit("开始执行语音识别...")
-                                try:
-                                    success = await self.speech_recognition(audio_path, aweme_id)
-                                    if success:
-                                        self.log_message.emit("语音识别成功完成！")
-                                    else:
-                                        self.log_message.emit("语音识别失败，请检查日志")
-                                except Exception as e:
-                                    self.log_message.emit(f"语音识别过程中出错: {str(e)}")
-                                    import traceback
-                                    self.log_message.emit(traceback.format_exc())
-                            else:
-                                self.log_message.emit("警告: Whisper模型未能成功加载，无法进行语音识别")
-                                self.log_message.emit("请确保您有足够的磁盘空间和内存，然后点击'加载模型'按钮手动加载")
-                        else:
-                            self.log_message.emit("音频提取失败，无法进行语音识别")
                     else:
-                        self.log_message.emit(f"视频 {aweme_id} 下载失败!")
-                        fail_count += 1
-                    
+                        # 尝试使用网页方式下载
+                        self.log_message.emit("直接下载失败，尝试通过网页方式获取...")
+                        if await self._download_from_web(aweme_id, file_path):
+                            self.log_message.emit(f"通过网页下载成功: {file_path}")
+                            
+                            # 添加到下载记录
+                            await self._add_download_record(aweme_id)
+                            
+                            # 处理额外内容（如音频和封面）
+                            await self._process_extra_content(video_info, file_path, aweme_id)
+                            
+                            success_count += 1
+                        else:
+                            self.log_message.emit(f"下载失败: {title}")
+                            fail_count += 1
                 except Exception as e:
-                    self.log_message.emit(f"处理视频 {index+1} 时出错: {str(e)}")
+                    self.log_message.emit(f"处理链接时出错: {str(e)}")
                     import traceback
                     self.log_message.emit(traceback.format_exc())
                     fail_count += 1
-                    continue
-            
-            # 计算总用时
+                    
+                # 添加一点延迟，避免请求过快
+                await asyncio.sleep(1)
+                
+            # 全部完成
             end_time = time.time()
             duration = end_time - start_time
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
             
-            # 输出统计信息
-            self.log_message.emit(f"{'='*40}")
-            self.log_message.emit(f"下载完成! 总用时: {duration:.1f} 秒")
-            self.log_message.emit(f"总计: {total_count} 个视频")
+            self.log_message.emit(f"\n批量下载完成:")
+            self.log_message.emit(f"总共: {total_count} 个链接")
             self.log_message.emit(f"成功: {success_count} 个")
             self.log_message.emit(f"跳过: {skip_count} 个")
             self.log_message.emit(f"失败: {fail_count} 个")
+            self.log_message.emit(f"用时: {minutes}分{seconds}秒")
             
-            # 发出下载完成信号
+            self.progress_updated.emit(100)
             self.download_finished.emit()
             
         except Exception as e:
-            self.log_message.emit(f"批量下载过程中出错: {str(e)}")
+            self.log_message.emit(f"批量下载过程中发生错误: {str(e)}")
             import traceback
             self.log_message.emit(traceback.format_exc())
-            # 发出下载完成信号
             self.download_finished.emit()
 
     async def _extract_audio(self, video_path: str, aweme_id: str) -> Optional[str]:
@@ -1640,145 +1968,188 @@ class VideoDownloader(QObject):
             return None
 
     async def speech_recognition(self, audio_file, video_id):
-        """使用配置的语音识别引擎进行识别"""
-        recognizer = SpeechRecognizer(self.config)
-        text = recognizer.recognize(audio_file)
+        """
+        执行语音识别并保存结果
         
-        if text:
-            # 保存文案
-            text_path = os.path.join(
-                self.config.text_path, 
-                f"{video_id}_文案.txt"
-            )
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(text)
+        此方法是所有语音识别的统一入口点，包括:
+        1. 下载视频后的自动文案提取
+        2. 导入视频后的文案提取
+        3. 导入音频的文案提取
+        
+        该方法会根据用户在设置中选择的语音识别引擎来调用对应的识别方法，
+        确保所有场景下都使用用户指定的引擎。
+        """
+        try:
+            if not os.path.exists(audio_file):
+                self.log_message.emit(f"错误: 音频文件不存在: {audio_file}")
+                return False
+                
+            text_dir = self.config.text_path
+            os.makedirs(text_dir, exist_ok=True)
+            text_file = os.path.join(text_dir, f"{video_id}_文案.txt")
             
-            self.log_message.emit(f"成功提取文案: {text}")
-            return text
-        else:
-            self.log_message.emit("未能识别音频内容")
-            return None
+            # 获取选择的引擎 - 直接使用用户在设置中选择的引擎
+            engine_name = self.config.speech_recognition_engine
+            self.log_message.emit(f"使用 {engine_name} 引擎进行语音识别...")
+            
+            # 创建语音识别器实例
+            recognizer = SpeechRecognizer(self.config)
+            
+            # 根据当前选择的引擎执行识别
+            engine = recognizer.ENGINE_MAP.get(engine_name, "whisper")
+            self.log_message.emit(f"识别引擎类型: {engine}")
+            
+            # 检查音频文件大小和时长
+            try:
+                file_size = os.path.getsize(audio_file)
+                self.log_message.emit(f"音频文件大小: {self._format_size(file_size)}")
+                
+                # 尝试获取音频时长
+                try:
+                    import subprocess
+                    cmd = [
+                        self.config.ffmpeg_path,
+                        "-i", audio_file,
+                        "-hide_banner"
+                    ]
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        universal_newlines=True
+                    )
+                    _, stderr = process.communicate()
+                    
+                    # 从FFmpeg输出中解析时长
+                    import re
+                    duration_match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", stderr)
+                    if duration_match:
+                        hours, minutes, seconds = duration_match.groups()
+                        duration_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                        self.log_message.emit(f"音频时长: {int(duration_seconds//60)}分{int(duration_seconds%60)}秒")
+                        
+                        # 对于较长的音频文件，提供额外警告
+                        if duration_seconds > 300 and engine == "google":  # 5分钟以上
+                            self.log_message.emit("警告: 音频时长较长，Google语音识别可能会超时或失败，建议使用Whisper")
+                except Exception as e:
+                    self.log_message.emit(f"获取音频时长失败: {str(e)}")
+            except Exception as e:
+                self.log_message.emit(f"检查音频文件失败: {str(e)}")
+            
+            # 针对不同引擎的特殊处理
+            if engine == "whisper":
+                # 仅在使用Whisper时加载模型
+                if not self.whisper_model:
+                    self.log_message.emit("加载Whisper模型...")
+                    await self.load_whisper_model()
+                
+                # 将模型传给识别器
+                recognizer.whisper_model = self.whisper_model
+            elif engine == "google":
+                # 检查Google语音识别依赖
+                try:
+                    import speech_recognition as sr
+                    self.log_message.emit("已安装speech_recognition库")
+                except ImportError:
+                    self.log_message.emit("错误: 未安装speech_recognition库，无法使用Google语音识别")
+                    self.log_message.emit("请使用以下命令安装: pip install SpeechRecognition pyaudio")
+                    return False
+                    
+                # 检查网络连接
+                try:
+                    import socket
+                    socket.create_connection(("www.google.com", 80), timeout=5)
+                    self.log_message.emit("网络连接正常，可以访问Google服务")
+                except Exception:
+                    self.log_message.emit("警告: 无法连接到Google服务，语音识别可能会失败")
+            
+            # 执行识别 - 调用统一的识别接口
+            self.log_message.emit("开始识别音频内容...")
+            text = recognizer.recognize(audio_file)
+            
+            if not text:
+                self.log_message.emit("语音识别失败，未能识别出文本。")
+                
+                # 针对不同引擎提供帮助信息
+                if engine == "google":
+                    self.log_message.emit("\n可能的解决方案:")
+                    self.log_message.emit("1. 确保已安装PyAudio库: pip install pyaudio")
+                    self.log_message.emit("2. 确保网络可以访问Google服务")
+                    self.log_message.emit("3. 音频文件可能太长，Google语音识别对较长音频支持有限")
+                    self.log_message.emit("4. 尝试使用Whisper引擎，它对长音频有更好的支持")
+                elif engine == "whisper":
+                    self.log_message.emit("\n可能的解决方案:")
+                    self.log_message.emit("1. 确保已安装Whisper库: pip install openai-whisper")
+                    self.log_message.emit("2. 检查音频文件是否有效")
+                    self.log_message.emit("3. 尝试使用不同大小的Whisper模型")
+                
+                return False
+                
+            # 保存识别结果
+            with open(text_file, "w", encoding="utf-8") as f:
+                f.write(text)
+                
+            self.log_message.emit(f"文案提取完成，已保存到: {text_file}")
+            self.log_message.emit(f"文案内容:\n{text[:200]}..." if len(text) > 200 else f"文案内容:\n{text}")
+            
+            return True
+            
+        except Exception as e:
+            self.log_message.emit(f"语音识别出错: {str(e)}")
+            import traceback
+            self.log_message.emit(traceback.format_exc())
+            return False
 
     async def process_imported_video(self, video_path: str) -> bool:
         """处理导入的视频文件"""
+        self.log_message.emit(f"开始处理导入的视频文件: {video_path}")
+        
         try:
-            self.log_message.emit(f"处理导入的视频文件: {video_path}")
-            
-            # 检查文件是否存在
+            # 检查文件是否存在且有效
             if not os.path.exists(video_path):
-                self.log_message.emit(f"错误: 文件不存在: {video_path}")
+                self.log_message.emit(f"错误: 视频文件不存在: {video_path}")
                 return False
                 
-            # 生成唯一ID (使用文件名的哈希值)
-            filename = os.path.basename(video_path)
-            file_hash = hashlib.md5(filename.encode()).hexdigest()
-            aweme_id = f"import_{file_hash[:16]}"
-            
-            # 检查文件是否是视频
             if not self._validate_video_file(video_path):
-                self.log_message.emit(f"错误: 不是有效的视频文件: {video_path}")
+                self.log_message.emit("错误: 无效的视频文件格式")
                 return False
                 
-            # 构建目标路径
-            target_path = os.path.join(self.config.download_path, f"{aweme_id}.mp4")
-            
-            # 如果已经处理过，检查对应的文本文件是否存在
-            text_path = os.path.join(self.config.text_path, f"{aweme_id}.txt")
-            if os.path.exists(text_path) and os.path.exists(target_path):
-                self.log_message.emit(f"视频已处理，文本已存在: {text_path}")
-                return True
+            # 从文件名中提取视频ID，如果没有则生成一个
+            video_id = os.path.basename(video_path).split('.')[0]
+            if video_id.isdigit() and len(video_id) > 5:
+                # 可能是有效的作品ID，直接使用
+                pass
+            else:
+                # 生成基于文件内容的唯一ID
+                video_id = hashlib.md5(open(video_path, 'rb').read(1024*1024)).hexdigest()[:16]
                 
-            # 复制文件到目标路径 (如果不是同一个文件)
-            if os.path.abspath(video_path) != os.path.abspath(target_path):
+            self.log_message.emit(f"视频ID: {video_id}")
+                
+            # 复制到下载目录
+            target_path = os.path.join(self.config.download_path, f"{video_id}.mp4")
+            
+            # 如果目标文件已存在且不是同一个文件，则复制
+            if not os.path.exists(target_path) or os.path.abspath(video_path) != os.path.abspath(target_path):
                 import shutil
                 self.log_message.emit(f"复制视频文件到: {target_path}")
                 shutil.copy2(video_path, target_path)
-            
-            # 提取音频
-            audio_path = os.path.join(self.config.audio_path, f"{aweme_id}.mp3")
-            
-            # 确保模型已加载
-            if self.model is None:
-                self.log_message.emit("加载模型...")
-                await self.load_whisper_model()
                 
-            if not os.path.exists(audio_path):
-                self.log_message.emit(f"正在提取音频...")
+            # 生成下载记录
+            await self._add_download_record(video_id)
                 
-                # 使用FFmpeg提取音频
-                try:
-                    # 首先检查视频是否有音频流
-                    cmd_check = [
-                        self.config.ffmpeg_path,
-                        '-i', target_path,
-                        '-hide_banner'
-                    ]
-                    
-                    self.log_message.emit("检查视频是否包含音频流...")
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd_check,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    
-                    stdout, stderr = await process.communicate()
-                    stderr_str = stderr.decode('utf-8', errors='ignore')
-                    
-                    # 检查输出中是否包含音频流信息
-                    if 'Audio:' not in stderr_str:
-                        self.log_message.emit("警告: 视频可能不包含音频流")
-                    
-                    # 无论如何尝试提取音频
-                    cmd_extract = [
-                        self.config.ffmpeg_path,
-                        '-i', target_path,
-                        '-vn',  # 不处理视频
-                        '-acodec', 'libmp3lame',  # 使用MP3编码
-                        '-ar', '44100',  # 采样率
-                        '-ac', '2',  # 双声道
-                        '-b:a', '128k',  # 比特率
-                        '-y',  # 覆盖已有文件
-                        audio_path
-                    ]
-                    
-                    self.log_message.emit("执行音频提取...")
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd_extract,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    
-                    stdout, stderr = await process.communicate()
-                    
-                    if process.returncode != 0:
-                        stderr_str = stderr.decode('utf-8', errors='ignore')
-                        self.log_message.emit(f"音频提取失败: {stderr_str}")
-                        return False
-                    
-                    if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1024:
-                        self.log_message.emit("音频提取失败: 输出文件不存在或过小")
-                        return False
-                        
-                    self.log_message.emit(f"音频提取成功: {audio_path}")
-                    
-                except Exception as e:
-                    self.log_message.emit(f"音频提取过程中出错: {str(e)}")
-                    import traceback
-                    self.log_message.emit(traceback.format_exc())
-                    return False
-            
-            # 进行语音识别
-            if os.path.exists(audio_path) and not os.path.exists(text_path):
-                self.log_message.emit("开始语音识别...")
-                success = await self.speech_recognition(audio_path, aweme_id)
-                if success:
-                    self.log_message.emit("视频处理完成!")
-                    return True
+            # 提取音频和文案
+            if self.config.download_audio or self.config.extract_text:
+                audio_path = await self._extract_audio(target_path, video_id)
+                
+                if audio_path and self.config.extract_text:
+                    self.log_message.emit("开始执行语音识别...")
+                    # 不要在这里提前加载Whisper模型，让speech_recognition方法根据选择的引擎决定
+                    await self.speech_recognition(audio_path, video_id)
                 else:
-                    self.log_message.emit("语音识别失败")
-                    return False
-            
-            self.log_message.emit("视频处理完成!")
+                    self.log_message.emit("提取音频失败，无法执行语音识别")
+            else:
+                self.log_message.emit("文案提取功能已关闭，跳过语音识别")
+                
             return True
             
         except Exception as e:
@@ -1786,131 +2157,123 @@ class VideoDownloader(QObject):
             import traceback
             self.log_message.emit(traceback.format_exc())
             return False
-
-    async def import_video(self, video_path: str) -> bool:
-        """导入视频并处理（提取音频和文案）"""
-        self.log_message.emit(f"导入视频: {os.path.basename(video_path)}")
-        
-        # 处理导入的视频
-        success = await self.process_imported_video(video_path)
-        
-        if success:
-            self.log_message.emit("视频导入处理完成！")
             
-            # 视频导入成功后，检查是否需要提取音频和文案
-            if self.config.extract_text:
-                # 生成唯一ID
-                video_id = os.path.splitext(os.path.basename(video_path))[0]
-                if "_temp" in video_id:
-                    video_id = video_id.replace("_temp", "")
-                    
-                # 提取音频
-                audio_path = await self._extract_audio(video_path, video_id)
-                if audio_path:
-                    self.log_message.emit(f"提取音频成功: {audio_path}")
-                    
-                    # 执行语音识别
-                    self.log_message.emit("开始执行语音识别...")
-                    await self.speech_recognition(audio_path, video_id)
-                else:
-                    self.log_message.emit("提取音频失败，无法执行语音识别")
-            else:
-                self.log_message.emit("文案提取功能已关闭，跳过语音识别")
-                
-        else:
-            self.log_message.emit("视频导入处理失败！")
-            
-        return success
-
     async def import_audio(self, audio_path: str) -> bool:
-        """直接导入音频文件进行转录"""
+        """导入音频文件直接进行文案提取，支持多种音频格式"""
+        self.log_message.emit(f"开始处理导入的音频文件: {audio_path}")
+        
         try:
-            self.log_message.emit(f"处理导入的音频文件: {audio_path}")
-            
             # 检查文件是否存在
             if not os.path.exists(audio_path):
-                self.log_message.emit(f"错误: 文件不存在: {audio_path}")
+                self.log_message.emit(f"错误: 音频文件不存在: {audio_path}")
                 return False
                 
-            # 生成唯一ID (使用文件名的哈希值)
-            filename = os.path.basename(audio_path)
-            file_hash = hashlib.md5(filename.encode()).hexdigest()
-            audio_id = f"audioimport_{file_hash[:16]}"
+            # 生成唯一ID
+            audio_id = os.path.basename(audio_path).split('.')[0]
+            if audio_id.isdigit() and len(audio_id) > 5:
+                # 可能是有效的作品ID，直接使用
+                pass
+            else:
+                # 生成基于文件名的唯一ID
+                audio_id = hashlib.md5(os.path.basename(audio_path).encode()).hexdigest()[:16]
+                
+            self.log_message.emit(f"音频ID: {audio_id}")
             
-            # 检查文件是否是音频 (简单检查扩展名)
-            audio_extensions = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg']
-            if not any(audio_path.lower().endswith(ext) for ext in audio_extensions):
-                self.log_message.emit(f"警告: 文件可能不是音频文件: {audio_path}")
-                # 继续处理，允许用户尝试处理非标准扩展名的音频文件
-            
-            # 构建目标路径
+            # 处理目标路径
             target_path = os.path.join(self.config.audio_path, f"{audio_id}.mp3")
             
-            # 如果已经处理过，检查对应的文本文件是否存在
-            text_path = os.path.join(self.config.text_path, f"{audio_id}.txt")
-            if os.path.exists(text_path):
-                self.log_message.emit(f"音频已处理，文本已存在: {text_path}")
-                return True
-                
-            # 确保模型已加载
-            if self.model is None:
-                self.log_message.emit("加载Whisper模型...")
-                await self.load_whisper_model()
-                if self.model is None:
-                    self.log_message.emit("错误: 无法加载语音识别模型")
-                    return False
-            
-            # 如果不是MP3格式，转换为MP3格式
-            if not audio_path.lower().endswith('.mp3'):
-                self.log_message.emit(f"转换音频格式到MP3: {audio_path} -> {target_path}")
-                
-                # 使用FFmpeg转换音频格式
-                try:
-                    cmd = [
-                        self.config.ffmpeg_path,
-                        '-i', audio_path,
-                        '-acodec', 'libmp3lame',  # 使用MP3编码
-                        '-ar', '44100',  # 采样率
-                        '-ac', '2',  # 双声道
-                        '-b:a', '128k',  # 比特率
-                        '-y',  # 覆盖已有文件
-                        target_path
-                    ]
-                    
-                    self.log_message.emit("执行音频转换...")
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    
-                    stdout, stderr = await process.communicate()
-                    
-                    if process.returncode != 0:
-                        stderr_str = stderr.decode('utf-8', errors='ignore')
-                        self.log_message.emit(f"音频转换失败: {stderr_str}")
-                        return False
-                        
-                    if not os.path.exists(target_path) or os.path.getsize(target_path) < 1024:
-                        self.log_message.emit("音频转换失败: 输出文件不存在或过小")
-                        return False
-                        
-                    self.log_message.emit(f"音频转换成功: {target_path}")
-                    
-                except Exception as e:
-                    self.log_message.emit(f"音频转换过程中出错: {str(e)}")
-                    import traceback
-                    self.log_message.emit(traceback.format_exc())
-                    return False
+            # 检查音频文件是否已处理过
+            if os.path.exists(target_path):
+                self.log_message.emit(f"该音频已处理过: {target_path}")
+                # 直接使用已存在的文件，不尝试复制
             else:
-                # 如果已经是MP3格式，直接复制到目标路径
-                import shutil
-                self.log_message.emit(f"复制音频文件到: {target_path}")
-                shutil.copy2(audio_path, target_path)
+                # 检查音频文件格式，如果不是MP3则转换
+                _, ext = os.path.splitext(audio_path)
+                if ext.lower() != '.mp3':
+                    self.log_message.emit(f"音频文件格式为 {ext}，将转换为MP3格式")
+                    
+                    # 使用FFmpeg转换音频格式
+                    try:
+                        cmd = [
+                            self.config.ffmpeg_path,
+                            '-i', audio_path,
+                            '-vn',  # 不处理视频
+                            '-acodec', 'libmp3lame',  # 使用mp3编码器
+                            '-q:a', '4',  # 质量设置，范围0-9，4是较好的质量
+                            '-y',  # 覆盖输出文件
+                            target_path
+                        ]
+                        
+                        self.log_message.emit(f"执行FFmpeg命令转换音频...")
+                        process = subprocess.Popen(
+                            cmd, 
+                            stdout=subprocess.PIPE, 
+                            stderr=subprocess.PIPE,
+                            universal_newlines=True
+                        )
+                        
+                        # 读取输出信息
+                        for line in process.stderr:
+                            if "time=" in line and "bitrate=" in line:
+                                # 从FFmpeg输出中提取进度信息
+                                matches = re.search(r'time=(\d+:\d+:\d+.\d+)', line)
+                                if matches:
+                                    progress_time = matches.group(1)
+                                    self.log_message.emit(f"转换进度: {progress_time}")
+                        
+                        # 等待进程完成
+                        process.wait()
+                        
+                        # 检查是否成功
+                        if process.returncode != 0:
+                            self.log_message.emit(f"FFmpeg转换音频失败，返回码: {process.returncode}")
+                            return False
+                        
+                        self.log_message.emit(f"音频转换完成: {target_path}")
+                    except Exception as e:
+                        self.log_message.emit(f"转换音频过程中出错: {str(e)}")
+                        import traceback
+                        self.log_message.emit(traceback.format_exc())
+                        return False
+                else:
+                    # 如果已经是MP3格式，尝试复制到目标路径
+                    try:
+                        import shutil
+                        self.log_message.emit(f"复制音频文件到: {target_path}")
+                        # 检查源文件和目标文件是否相同
+                        if os.path.abspath(audio_path) != os.path.abspath(target_path):
+                            shutil.copy2(audio_path, target_path)
+                        else:
+                            self.log_message.emit("源文件和目标文件相同，无需复制")
+                    except PermissionError as e:
+                        self.log_message.emit(f"无法访问文件，可能被其他程序占用: {str(e)}")
+                        # 如果是权限错误，且源文件和目标文件名不同，尝试替代方案
+                        if os.path.abspath(audio_path) != os.path.abspath(target_path):
+                            try:
+                                self.log_message.emit("尝试使用替代方法复制文件...")
+                                with open(audio_path, 'rb') as src:
+                                    with open(target_path, 'wb') as dst:
+                                        dst.write(src.read())
+                                self.log_message.emit("文件复制成功")
+                            except Exception as e2:
+                                self.log_message.emit(f"替代复制方法也失败: {str(e2)}")
+                                # 如果替代方法也失败，但文件已存在，则继续处理
+                                if not os.path.exists(target_path):
+                                    return False
+                        else:
+                            self.log_message.emit("源文件和目标文件相同，将直接使用")
+                    except Exception as e:
+                        self.log_message.emit(f"复制文件过程中出错: {str(e)}")
+                        import traceback
+                        self.log_message.emit(traceback.format_exc())
+                        # 如果文件不存在，则返回失败
+                        if not os.path.exists(target_path):
+                            return False
             
             # 进行语音识别
             if os.path.exists(target_path):
                 self.log_message.emit("开始音频文件语音识别...")
+                # 不要在这里提前加载Whisper模型，让speech_recognition方法根据选择的引擎决定
                 success = await self.speech_recognition(target_path, audio_id)
                 if success:
                     self.log_message.emit("音频处理完成!")

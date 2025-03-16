@@ -111,10 +111,6 @@ class SettingsDialog(QDialog):
         self.speech_engine = QComboBox()
         self.speech_engine.addItems([
             "Whisper (OpenAI)", 
-            "Google语音识别", 
-            "百度语音识别", 
-            "阿里云语音识别", 
-            "讯飞语音识别",
             "PaddleSpeech"
         ])
         
@@ -122,16 +118,8 @@ class SettingsDialog(QDialog):
         engines = {
             "whisper": 0,
             "Whisper (OpenAI)": 0,
-            "google": 1,
-            "Google语音识别": 1,
-            "baidu": 2,
-            "百度语音识别": 2,
-            "ali": 3,
-            "阿里云语音识别": 3,
-            "xunfei": 4,
-            "讯飞语音识别": 4,
-            "paddlespeech": 5,
-            "PaddleSpeech": 5
+            "paddlespeech": 1,
+            "PaddleSpeech": 1
         }
         
         # 从配置中获取当前引擎，并设置对应的索引
