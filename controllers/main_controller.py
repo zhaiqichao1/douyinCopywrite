@@ -63,7 +63,9 @@ class MainController:
     def process_imported_video(self, video_path):
         """处理导入的视频"""
         self.window.log(f"处理导入的视频: {video_path}")
-        
+
+
+
         # 创建新线程处理视频导入，避免UI卡死
         self.video_import_thread = VideoImportThread(self.downloader, video_path)
         self.video_import_thread.start()
