@@ -18,10 +18,6 @@ if __name__ == "__main__":
     for directory in ["video", "audio", "text"]:
         os.makedirs(directory, exist_ok=True)
     
-    # 设置环境变量以禁用自动下载浏览器
-    os.environ["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-    
     # 创建应用程序
     app = QApplication(sys.argv)
     app.setApplicationName("抖音视频下载与文案提取")
