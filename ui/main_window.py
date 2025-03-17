@@ -81,6 +81,60 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(download_group)
         
+        # 浏览器设置组
+        browser_group = QGroupBox("浏览器设置")
+        browser_layout = QVBoxLayout(browser_group)
+        
+        # 浏览器类型选择
+        browser_type_layout = QHBoxLayout()
+        browser_type_layout.addWidget(QLabel('浏览器类型:'))
+        self.browser_type = QComboBox()
+        self.browser_type.addItems([
+            "系统浏览器", 
+            "自动下载浏览器"
+        ])
+        # 设置当前值
+        self.browser_type.setCurrentIndex(0 if self.config.browser_type == "system" else 1)
+        self.browser_type.currentIndexChanged.connect(self.toggle_browser_path)
+        browser_type_layout.addWidget(self.browser_type)
+        browser_layout.addLayout(browser_type_layout)
+        
+        # 浏览器路径设置
+        browser_path_layout = QHBoxLayout()
+        self.browser_path_label = QLabel('浏览器路径:')
+        browser_path_layout.addWidget(self.browser_path_label)
+        self.browser_path = QLineEdit(self.config.browser_executable_path)
+        browser_path_layout.addWidget(self.browser_path)
+        self.browse_browser_btn = QPushButton('浏览...')
+        self.browse_browser_btn.clicked.connect(self.browse_browser)
+        browser_path_layout.addWidget(self.browse_browser_btn)
+        browser_layout.addLayout(browser_path_layout)
+        
+        # Chrome路径设置
+        chrome_path_layout = QHBoxLayout()
+        chrome_path_layout.addWidget(QLabel('Chrome路径:'))
+        self.chrome_path = QLineEdit(self.config.chrome_path or "")
+        chrome_path_layout.addWidget(self.chrome_path)
+        browse_chrome_btn = QPushButton('浏览...')
+        browse_chrome_btn.clicked.connect(lambda: self.browse_file(self.chrome_path, "Chrome (chrome.exe)"))
+        chrome_path_layout.addWidget(browse_chrome_btn)
+        browser_layout.addLayout(chrome_path_layout)
+        
+        # Edge路径设置
+        edge_path_layout = QHBoxLayout()
+        edge_path_layout.addWidget(QLabel('Edge路径:'))
+        self.edge_path = QLineEdit(self.config.edge_path or "")
+        edge_path_layout.addWidget(self.edge_path)
+        browse_edge_btn = QPushButton('浏览...')
+        browse_edge_btn.clicked.connect(lambda: self.browse_file(self.edge_path, "Edge (msedge.exe)"))
+        edge_path_layout.addWidget(browse_edge_btn)
+        browser_layout.addLayout(edge_path_layout)
+        
+        # 初始化浏览器路径可见性
+        self.toggle_browser_path()
+        
+        layout.addWidget(browser_group)
+        
         # 添加Cookie设置组
         cookie_group = QGroupBox("抖音Cookie设置（获取更好的下载效果）")
         cookie_layout = QVBoxLayout(cookie_group)
@@ -154,25 +208,6 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(speech_group)
         
-        # # 高级设置组
-        # advanced_group = QGroupBox("高级设置")
-        # advanced_layout = QVBoxLayout(advanced_group)
-        #
-        # # API超时设置
-        # timeout_layout = QHBoxLayout()
-        # timeout_layout.addWidget(QLabel('API超时(秒):'))
-        # self.api_timeout = QLineEdit(str(self.config.api_timeout))
-        # timeout_layout.addWidget(self.api_timeout)
-        #
-        # # 最大重试次数
-        # timeout_layout.addWidget(QLabel('最大重试次数:'))
-        # self.max_retries = QLineEdit(str(self.config.max_retries))
-        # timeout_layout.addWidget(self.max_retries)
-        #
-        # advanced_layout.addLayout(timeout_layout)
-        #
-        # layout.addWidget(advanced_group)
-        
         # 确定和取消按钮
         buttons = QHBoxLayout()
         ok_btn = QPushButton('确定')
@@ -182,6 +217,24 @@ class SettingsDialog(QDialog):
         buttons.addWidget(ok_btn)
         buttons.addWidget(cancel_btn)
         layout.addLayout(buttons)
+        
+    def toggle_browser_path(self):
+        """切换浏览器路径输入框的可见性"""
+        is_system_browser = self.browser_type.currentIndex() == 0
+        self.browser_path_label.setVisible(is_system_browser)
+        self.browser_path.setVisible(is_system_browser)
+        self.browse_browser_btn.setVisible(is_system_browser)
+        
+    def browse_browser(self):
+        """浏览选择浏览器路径"""
+        file, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择浏览器",
+            self.browser_path.text(),
+            "浏览器 (*.exe);;所有文件 (*.*)"
+        )
+        if file:
+            self.browser_path.setText(file)
         
     def import_cookie_from_chrome(self):
         """从Chrome浏览器导入抖音Cookie"""
@@ -300,7 +353,13 @@ class SettingsDialog(QDialog):
             'extract_text': self.extract_text_checkbox.isChecked(),
             'douyin_cookie': self.cookie_text.toPlainText().strip(),
             'speech_recognition_engine': self.speech_engine.currentText(),
-            'speech_recognition_config': self.config.speech_recognition_config
+            'speech_recognition_config': self.config.speech_recognition_config,
+            
+            # 浏览器设置
+            'browser_type': "system" if self.browser_type.currentIndex() == 0 else "auto",
+            'browser_executable_path': self.browser_path.text(),
+            'chrome_path': self.chrome_path.text(),
+            'edge_path': self.edge_path.text()
         }
         
         # 更新Whisper模型配置

@@ -15,8 +15,12 @@ def resource_path(relative_path):
 
 if __name__ == "__main__":
     # 确保必要的目录存在
-    for directory in ["video", "audio", "text", "lib"]:
+    for directory in ["video", "audio", "text"]:
         os.makedirs(directory, exist_ok=True)
+    
+    # 设置环境变量以禁用自动下载浏览器
+    os.environ["PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"] = "1"
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
     
     # 创建应用程序
     app = QApplication(sys.argv)

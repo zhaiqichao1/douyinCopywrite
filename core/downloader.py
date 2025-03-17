@@ -2101,61 +2101,34 @@ class VideoDownloader(QObject):
             return False
 
     async def process_imported_video(self, video_path: str) -> bool:
-        """处理导入的视频文件"""
-        self.log_message.emit(f"开始处理导入的视频文件: {video_path}")
-        
+        """处理导入的视频文件，提取音频并识别文本
+        :param video_path: 视频文件路径
+        :return: 是否处理成功
+        """
         try:
-            # 检查文件是否存在且有效
-            if not os.path.exists(video_path):
-                self.log_message.emit(f"错误: 视频文件不存在: {video_path}")
-                return False
-                
-            if not self._validate_video_file(video_path):
-                self.log_message.emit("错误: 无效的视频文件格式")
-                return False
-                
-            # 从文件名中提取视频ID，如果没有则生成一个
-            video_id = os.path.basename(video_path).split('.')[0]
-            if video_id.isdigit() and len(video_id) > 5:
-                # 可能是有效的作品ID，直接使用
-                pass
-            else:
-                # 生成基于文件内容的唯一ID
-                video_id = hashlib.md5(open(video_path, 'rb').read(1024*1024)).hexdigest()[:16]
-                
+            # 获取文件名（不含扩展名）作为视频ID
+            video_filename = os.path.basename(video_path)
+            video_id = os.path.splitext(video_filename)[0]
+            
+            self.log_message.emit(f"开始处理导入的视频文件: {video_path}")
             self.log_message.emit(f"视频ID: {video_id}")
-                
-            # 复制到下载目录
-            target_path = os.path.join(self.config.download_path, f"{video_id}.mp4")
             
-            # 如果目标文件已存在且不是同一个文件，则复制
-            if not os.path.exists(target_path) or os.path.abspath(video_path) != os.path.abspath(target_path):
-                import shutil
-                self.log_message.emit(f"复制视频文件到: {target_path}")
-                shutil.copy2(video_path, target_path)
+            # 提取音频
+            audio_file = await self._extract_audio(video_path, video_id)
+            if not audio_file:
+                self.log_message.emit("提取音频失败")
+                return False
                 
-            # 生成下载记录
-            await self._add_download_record(video_id)
-                
-            # 提取音频和文案
-            if self.config.download_audio or self.config.extract_text:
-                audio_path = await self._extract_audio(target_path, video_id)
-                
-                if audio_path and self.config.extract_text:
-                    self.log_message.emit("开始执行语音识别...")
-                    # 不要在这里提前加载Whisper模型，让speech_recognition方法根据选择的引擎决定
-                    await self.speech_recognition(audio_path, video_id)
-                else:
-                    self.log_message.emit("提取音频失败，无法执行语音识别")
-            else:
-                self.log_message.emit("文案提取功能已关闭，跳过语音识别")
-                
+            # 识别文本
+            if self.config.extract_text:
+                # 使用视频ID作为文件名
+                await self.speech_recognition(audio_file, video_id)
+            
             return True
-            
         except Exception as e:
-            self.log_message.emit(f"处理导入视频过程中出错: {str(e)}")
+            self.log_message.emit(f"处理导入视频出错: {str(e)}")
             import traceback
-            self.log_message.emit(traceback.format_exc())
+            print(traceback.format_exc())
             return False
             
     async def import_audio(self, audio_path: str) -> bool:

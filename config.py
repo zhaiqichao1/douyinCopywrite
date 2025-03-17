@@ -16,6 +16,18 @@ def find_chrome():
             return path
     return None
 
+def find_edge():
+    possible_paths = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Users\{}\AppData\Local\Microsoft\Edge\Application\msedge.exe".format(os.getenv('USERNAME'))
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return ""
+
 class Config:
     def __init__(self):
         # 语音识别引擎配置
@@ -67,10 +79,19 @@ class Config:
             # Cookie设置
             "douyin_cookie": "",             # 抖音cookie
 
-            # 浏览器设置（保留但不再使用）
+            # 浏览器设置
             "edge_path": self._get_default_edge_path(),
             "edge_debug_port": 9222,
             "edge_user_data_dir": "./edge_data",
+            
+            # Chrome设置
+            "chrome_path": find_chrome(),
+            "chrome_debug_port": 9222,
+            "chrome_user_data_dir": "./chrome-data",
+            
+            # 自动化浏览器设置
+            "browser_type": "system",        # system使用系统浏览器，auto使用自动化下载的浏览器
+            "browser_executable_path": "",   # 如果使用system，可手动指定路径
             
             # API设置
             "use_selenium": False,           # 是否使用selenium获取数据
@@ -122,6 +143,11 @@ class Config:
             "edge_path": self.edge_path,
             "edge_debug_port": self.edge_debug_port,
             "edge_user_data_dir": self.edge_user_data_dir,
+            "chrome_path": self.chrome_path,
+            "chrome_debug_port": self.chrome_debug_port,
+            "chrome_user_data_dir": self.chrome_user_data_dir,
+            "browser_type": self.browser_type,
+            "browser_executable_path": self.browser_executable_path,
             "use_selenium": self.use_selenium,
             "use_api": self.use_api,
             "api_timeout": self.api_timeout,
@@ -135,16 +161,7 @@ class Config:
             
     def _get_default_edge_path(self):
         """获取默认Edge浏览器路径"""
-        edge_paths = [
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-        ]
-        
-        for path in edge_paths:
-            if os.path.exists(path):
-                return path
-                
-        return ""  # 如果找不到Edge，返回空字符串
+        return find_edge()
         
     # 请求头配置
     headers = {
