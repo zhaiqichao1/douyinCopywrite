@@ -1,12 +1,13 @@
-import sys
 import asyncio
-import subprocess
-import os
+import sys
+
+from PyQt6.QtCore import QThread
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QThread, pyqtSlot
-from ui.main_window import MainWindow
-from core.downloader import VideoDownloader
+
 from config import Config
+from core.downloader import VideoDownloader
+from ui.main_window import MainWindow
+
 
 class DownloadThread(QThread):
     def __init__(self, downloader, urls):
@@ -26,7 +27,7 @@ class VideoImportThread(QThread):
         
     def run(self):
         """在新线程中运行视频导入和处理任务"""
-        asyncio.run(self.downloader.import_video(self.video_path))
+        asyncio.run(self.downloader.process_imported_video(self.video_path))
 
 class AudioImportThread(QThread):
     def __init__(self, downloader, audio_path):
